@@ -1,0 +1,16 @@
+{
+  "name": "inverter-data",
+  "version": "0.0.1",
+  "description": "Node to parse inverter data",
+  "main": "server.js",
+  "repository": "",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "author": "Santiago Gaviria",
+  "license": "",
+  "dependencies": {
+    "mysql": "*",
+    "async": "*"
+  }
+}
