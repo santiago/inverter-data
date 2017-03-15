@@ -11,6 +11,7 @@
   "license": "",
   "dependencies": {
     "mysql": "*",
-    "async": "*"
+    "async": "*",
+    "nodemailer": "*"
   }
 }
