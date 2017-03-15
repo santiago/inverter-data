@@ -3,37 +3,35 @@ const path = require('path');
 const $ = require('async');
 const mysql = require('mysql');
 
-const headers = [ 'Interval', 'DateTime', 'Serial', 'P_AC', 'E_DAY', 'T_WR', 'U_AC', 'U_AC_1', 'U_AC_2', 'U_AC_3', 'I_AC', 'F_AC', 'U_DC_1', 'I_DC_1', 'U_DC_2', 'I_DC_2', 'U_DC_3', 'I_DC_3', 'S', 'E_WR', 'M_WR', 'I_AC_1', 'I_AC_2', 'I_AC_3', 'P_AC_1', 'P_AC_2', 'P_AC_3', 'F_AC_1', 'F_AC_2', 'F_AC_3', 'R_DC', 'PC', 'PCS', 'PCS_LL', 'COS_PHI', 'COS_PHI_LL', 'S_COS_PHI', 'Current_Day_Energy', 'current_Day_Offset', 'ccEnergyOfDay_WithoutOffset' ];
+const headers = [ 'Interval', 'DateTime', 'Serial', 'P_AC', 'E_DAY', 'T_WR', 'U_AC', 'U_AC_1', 'U_AC_2', 'U_AC_3', 'I_AC', 'F_AC', 'U_DC_1', 'I_DC_1', 'U_DC_2', 'I_DC_2', 'U_DC_3', 'I_DC_3', 'S', 'E_WR', 'M_MR', 'I_AC_1', 'I_AC_2', 'I_AC_3', 'P_AC_1', 'P_AC_2', 'P_AC_3', 'F_AC_1', 'F_AC_2', 'F_AC_3', 'R_DC', 'PC', 'PCS', 'PCS_LL', 'COS_PHI', 'COS_PHI_LL', 'S_COS_PHI', 'Current_Day_Energy', 'Current_Day_Offset', 'ccEnergyOfDay_WithoutOffset' ];
 const E_WR = headers.indexOf('E_WR');
-const DateTime = headers.indexOf('Interval');
+const DateTime = headers.indexOf('DateTime');
 const Serial = headers.indexOf('Serial');
 
-var db = mysql.createConnection({
-  host     : '107.170.65.218', // localhost',
-  user     : 'shopkins_backend',
-  password : 'Nnd3l9&7',
-  database : 'shopkins_backend'
-});
-
 loadErrors((err) => {
-  console.log(err);
+  // console.log(errors);
 });
 
 module.exports = logParser;
 
 function logParser(logfile, done) {
-  var isLog = false;
-  var isHeader = false;
+  const self = this;
+  this.db = getDb();
+
+  const _done = (err)=> { self.db.destroy(); done(err); }
 
   fs.readFile(logfile, 'utf8', (err, data) => {
-    const lines = data.split('\n');
-    // Read each line concurrently and save to DB
-    $.each(lines, (l, cb) => {
+    var isLog = false;
+    var isHeader = false;
+
+    const lines = data.split('\n').filter(l => {
       if(isHeader) { isHeader = false; isLog = true; return; }
-      if(l.match(/^\[wr\]$/)) { isHeader = true; return; }
-      if(l.match(/^\[wr_end/)) { return; }
-      l && isLog && parseAndSave(l, cb);
-    }, done);
+      if(l.match(/^\[wr\]$/)) { isHeader = true }
+      if(l.match(/^\[wr_end/)) { isLog = false }
+      return isLog;
+    });
+    // Read each line concurrently and save to DB
+    $.each(lines, parseAndSave.bind(this), _done);
   });
 }
 
@@ -46,10 +44,10 @@ function parseAndSave(r, cb) {
   values.splice(1, 1, `"${values[DateTime]}"`);
   // Third column `Serial` is a code so we need to quote it
   values.splice(2, 1, `"${values[Serial]}"`);
-  const insert = `INSERT INTO "InverterData" ("${headers.join('","')}", "ID")
+  const insert = `INSERT INTO inverterdata (\`${headers.join('\`,\`')}\`, ID)
     VALUES(${values.join(',')}, NULL);`;
 
-  db.query(insert, (err) => {
+  this.db.query(insert, (err) => {
     if(err) { console.log(err); return cb(); }
     cb();
   });
@@ -59,12 +57,16 @@ function parseAndSave(r, cb) {
 var errors = {};
 
 function loadErrors(cb) {
-  db.query('SELECT ID, Description FROM ErrorCodes', (err, results) => {
+  const db = getDb();
+
+  db.query('SELECT ID, Description FROM errorcodes', (err, results) => {
     if(err) { console.log(err); return cb(err); }
     results.forEach((r) => {
       errors[r.ID] = r.Description;
-      console.log(`${r.ID} - ${r.Description}`);
     });
+
+    db.destroy();
+    cb();
   });
 }
 
@@ -77,7 +79,7 @@ const errorEmailTo = 'receiver@address';
 const errorEmailSubject = 'An error occurred in panel operation #PANEL_ID';
 
 function sendErrorEmail(error) {
-  console.log(error);
+  console.log('sendErrorEmail', error);
   /*transporter.sendMail({
      from: errorEmailFrom,
      to: errorEmailFrom,
@@ -85,4 +87,13 @@ function sendErrorEmail(error) {
      html: `<b>${errorEmailSubject}</b>`,
      text: errorEmailSubject
   });*/
+}
+
+function getDb() {
+  return mysql.createConnection({
+    host     : 'localhost',
+    user     : 'shopkins_backend',
+    password : 'Nnd3l9&7',
+    database : 'shopkins_backend'
+  });
 }
