@@ -17,8 +17,6 @@ loadErrors((err) => {
 });
 
 loadDaylightHours(() => {
-  console.log('sunset', sunset);
-  console.log('sunrise', sunrise);
 });
 
 module.exports = logParser;
