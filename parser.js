@@ -7,9 +7,18 @@ const headers = [ 'Interval', 'DateTime', 'Serial', 'P_AC', 'E_DAY', 'T_WR', 'U_
 const E_WR = headers.indexOf('E_WR');
 const DateTime = headers.indexOf('DateTime');
 const Serial = headers.indexOf('Serial');
+const Current_Day_Energy = headers.indexOf('Current_Day_Energy');
+
+var registry = {};
+var sunrise, sunset;
 
 loadErrors((err) => {
   // console.log(errors);
+});
+
+loadDaylightHours(() => {
+  console.log('sunset', sunset);
+  console.log('sunrise', sunrise);
 });
 
 module.exports = logParser;
@@ -18,7 +27,15 @@ function logParser(logfile, done) {
   const self = this;
   this.db = getDb();
 
-  const _done = (err)=> { self.db.destroy(); done(err); }
+  const _done = (err)=> {
+    // It's done parsing the `logfile`.
+    // Close the DB handle.
+    self.db.destroy();
+    // Archive the parsed logfile
+    archiveLog(logfile, () => {
+      done(err);
+    });
+  }
 
   fs.readFile(logfile, 'utf8', (err, data) => {
     var isLog = false;
@@ -32,25 +49,52 @@ function logParser(logfile, done) {
     });
 
     // Read each line concurrently and save to DB
-    $.each(lines, parseAndSave.bind(this), _done);
+    $.each(lines, processRecord.bind(this), _done);
   });
 }
 
-function parseAndSave(r, cb) {
+function processRecord(r, cb) {
   var values = r.split(';');
-  // If the value in the
+
+  // If the value in the E_WR is different than zero, then
+  // notify the error via email
   if(parseInt(values[E_WR])) { sendErrorEmail(values[E_WR]); }
+
+  const serial = values[Serial];
+  const time = (new Date(values[DateTime])).getTime();
+  const currentEnergy = parseInt(values[Current_Day_Energy]);
+
+  // If processed record is still not in registry, add it
+  registry[serial] || (registry[serial] = { time, currentEnergy });
+
+  // If we're still in daylight hours check
+  // whether there was power collected in the last hour.
+  if(isDaylightNow()) {
+    const lastTime = registry[serial].time;
+    if(time - lastTime > 1 * 60 * 60 * 1000) {
+      const lastEnergy = registry[serial].currentEnergy;
+      // If during daylight hours did not collect any
+      // power in the last hour, notify via email
+      if(!(currentEnergy > lastEnergy)) {
+        sendErrorEmail('999');
+      }
+      registry[serial] = { time, currentEnergy };
+    }
+  }
+
+  // Parse the record and save to DB
+  // parseAndSave(values, cb);
+  setTimeout(cb, 10);
+}
+
+function parseAndSave(values, cb) {
 
   // Second column is a date time string so we need to quote it
   values.splice(1, 1, `"${values[DateTime]}"`);
-  // Third column `Serial` is a code so we need to quote it
+  // Third column `Serial` is a string code so we need to quote it
   values.splice(2, 1, `"${values[Serial]}"`);
   const insert = `INSERT INTO inverterdata (\`${headers.join('\`,\`')}\`, ID)
     VALUES(${values.join(',')}, NULL);`;
-
-  // setTimeout(() => {
-  //   console.log(insert) && cb();
-  // }, 10)
 
   this.db.query(insert, (err) => {
     if(err) { console.log(err); return cb(); }
@@ -58,7 +102,7 @@ function parseAndSave(r, cb) {
   });
 }
 
-// Manage error in panel
+// Manage error in solar panel
 var errors = {};
 
 function loadErrors(cb) {
@@ -69,8 +113,49 @@ function loadErrors(cb) {
     results.forEach((r) => {
       errors[r.ID] = r.Description;
     });
+    errors['999'] = 'Has not collected power in the last hour.';
 
     db.destroy();
+    cb();
+  });
+}
+
+function loadDaylightHours(cb) {
+  // db.query('SELECT Date, Dawn, Sunrise, Sunset FROM daylighthours WHERE ', (err, results) => {
+  //   results.
+  // })
+  setTimeout(() => {
+    sunrise = '6:00';
+    sunset = '19:00';
+
+    const sunriseHours = parseInt(sunrise.split(':').shift());
+    const sunriseMinutes = parseInt(sunrise.split(':').pop());
+    var sunriseDate = new Date();
+    sunriseDate.setHours(sunriseHours);
+    sunriseDate.setMinutes(sunriseMinutes);
+
+    const sunsetHours = parseInt(sunset.split(':').shift());
+    const sunsetMinutes = parseInt(sunset.split(':').pop());
+    var sunsetDate = new Date();
+    sunsetDate.setHours(sunsetHours);
+    sunsetDate.setMinutes(sunsetMinutes);
+
+    sunrise = sunriseDate.getTime();
+    sunset = sunsetDate.getTime();
+
+    cb();
+  }, 10);
+}
+
+/*
+ * archiveLog: send the parsed log to an archive directory
+ */
+function archiveLog(logfile, cb) {
+  const file = logfile.split('/').pop();
+  const archiveDir = path.resolve(process.cwd(), 'archive');
+  const newPath = path.join(archiveDir, file);
+  fs.link(logfile, newPath, () => {
+    fs.unlinkSync(logfile);
     cb();
   });
 }
@@ -106,4 +191,8 @@ function getDb() {
     password : 'Nnd3l9&7',
     database : 'shopkins_backend'
   });
+}
+
+function isDaylightNow() {
+  return true // Date.now() < sunset;
 }
