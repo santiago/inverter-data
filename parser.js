@@ -71,9 +71,10 @@ function processRecord(r, cb) {
   // whether there was power collected in the last hour.
   if(isDaylightNow()) {
     const lastTime = registry[serial].time;
+    // Check every 1 hour
     if(time - lastTime > 1 * 60 * 60 * 1000) {
       const lastEnergy = registry[serial].currentEnergy;
-      // If during daylight hours did not collect any
+      // If during daylight the panel collected no
       // power in the last hour, notify via email
       if(!(currentEnergy > lastEnergy)) {
         sendErrorEmail('999');
