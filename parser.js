@@ -84,7 +84,7 @@ function processRecord(r, cb) {
   }
 
   // Parse the record and save to DB
-  // parseAndSave(values, cb);
+  parseAndSave(values, cb);
   setTimeout(cb, 10);
 }
 
@@ -195,5 +195,5 @@ function getDb() {
 }
 
 function isDaylightNow() {
-  return true // Date.now() < sunset;
+  return Date.now() < sunset;
 }
