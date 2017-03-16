@@ -67,7 +67,7 @@ function loadErrors(cb) {
   db.query('SELECT ID, Description FROM errorcodes', (err, results) => {
     if(err) { console.log(err); return cb(err); }
     results.forEach((r) => {
-      errors[parseInt(r.ID)] = r.Description;
+      errors[r.ID] = r.Description;
     });
 
     db.destroy();
