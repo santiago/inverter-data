@@ -30,9 +30,7 @@ function logParser(logfile, done) {
     // Close the DB handle.
     self.db.destroy();
     // Archive the parsed logfile
-    archiveLog(logfile, () => {
-      done(err);
-    });
+    archiveLog(logfile, ()=> { done(err) });
   }
 
   fs.readFile(logfile, 'utf8', (err, data) => {
@@ -66,14 +64,15 @@ function processRecord(r, cb) {
   registry[serial] || (registry[serial] = { time, currentEnergy });
 
   // If we're still in daylight hours check
-  // whether there was power collected in the last hour.
+  // whether there was power collected during
+  // the last hour.
   if(isDaylightNow()) {
     const lastTime = registry[serial].time;
     // Check every 1 hour
     if(time - lastTime > 1 * 60 * 60 * 1000) {
       const lastEnergy = registry[serial].currentEnergy;
-      // If during daylight the panel collected no
-      // power in the last hour, notify via email
+      // If panel collected no power during this
+      // time, notify via email
       if(!(currentEnergy > lastEnergy)) {
         sendErrorEmail('999');
       }
@@ -81,9 +80,23 @@ function processRecord(r, cb) {
     }
   }
 
-  // Parse the record and save to DB
-  parseAndSave(values, cb);
-  setTimeout(cb, 10);
+  // Parse the record and save to DB, then update Devices table
+  $.applyEachSeries([ parseAndSave.bind(this), updateDevices.bind(this) ], values, cb);
+  // setTimeout(cb, 10);
+}
+
+function updateDevices(values, cb) {
+  const updates = [
+    `UPDATE devices SET LastSeen = ${values[DateTime]} WHERE Serial = ${values[Serial]};`,
+    `UPDATE devices SET LastProduction = ${values[Current_Day_Energy]} WHERE Serial = ${values[Serial]};`,
+    `UPDATE devices SET CurrentError = ${values[E_WR]} WHERE Serial = ${values[Serial]};`
+  ];
+
+  var db = this.db;
+  $.eachSeries(updates, (q) => {
+    db.query(q, (err, results) => {
+    });
+  }, cb);
 }
 
 function parseAndSave(values, cb) {
