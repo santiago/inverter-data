@@ -85,7 +85,7 @@ function processRecord(r, cb) {
   // setTimeout(cb, 10);
 }
 
-function updateDevices(values, cb) {
+function updateDevices(values, done) {
   const updates = [
     `UPDATE devices SET LastSeen = ${values[DateTime]} WHERE Serial = ${values[Serial]};`,
     `UPDATE devices SET LastProduction = ${values[Current_Day_Energy]} WHERE Serial = ${values[Serial]};`,
@@ -93,10 +93,12 @@ function updateDevices(values, cb) {
   ];
 
   var db = this.db;
-  $.eachSeries(updates, (q) => {
+  $.eachSeries(updates, (q, cb) => {
     db.query(q, (err, results) => {
+      if(err) { console.log(`Error updating Devices tables. ${err}`); return cb(err); }
+      cb();
     });
-  }, cb);
+  }, done);
 }
 
 function parseAndSave(values, cb) {
@@ -133,12 +135,18 @@ function loadErrors(cb) {
 }
 
 function loadDaylightHours(cb) {
-  // db.query('SELECT Date, Dawn, Sunrise, Sunset FROM daylighthours WHERE ', (err, results) => {
-  //   results.
-  // })
-  setTimeout(() => {
-    sunrise = '6:00';
-    sunset = '19:00';
+  const db = getDb();
+
+  var today = new Date("2017-02-28");
+  today = today.toISOString().split('T')[0].split('-').reverse().join('/')
+
+  const query = `SELECT Dawn, Sunrise, Sunset FROM daylighthours
+    WHERE \`Date\` = '${today}'`;
+
+  db.query(query, (err, results) => {
+    var r = results.pop();
+    sunrise = r.Sunrise;
+    sunset = r.Sunset;
 
     const sunriseHours = parseInt(sunrise.split(':').shift());
     const sunriseMinutes = parseInt(sunrise.split(':').pop());
@@ -155,8 +163,9 @@ function loadDaylightHours(cb) {
     sunrise = sunriseDate.getTime();
     sunset = sunsetDate.getTime();
 
+    db.destroy();
     cb();
-  }, 10);
+  });
 }
 
 /*
@@ -193,6 +202,10 @@ function sendErrorEmail(errorCode) {
      subject: errorEmailSubject,
      html: `<b>${errorEmailSubject}</b>`,
      text: errorEmailSubject
+  }, (err, info) => {
+    if(err) { console.log(`Error sending email: ${err}`); }
+    console.log(info.envelope);
+    console.log(info.messageId);
   });
 }
 
