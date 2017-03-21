@@ -5,15 +5,19 @@ const $ = require('async');
 
 var logsDir = path.resolve(process.cwd(), 'logs');
 
-setInterval(run, 0.5 * 60 * 1000); // Run every 2 minutes
+setTimeout(run, 5 * 1000); // Run the first time
+setInterval(run, 1 * 60 * 60 * 1000); // Run every hour
 
 // Read logs available and apply parser to each
 // concurrently
 function run() {
-  var logfiles = fs.readdirSync(logsDir);
-  if(!logfiles.length) { return console.log('No logs available'); }
-  $.each(logfiles, parser, (err) => {
-    console.log('done syncing records to DB');
+  process.nextTick(() => {
+    var logfiles = fs.readdirSync(logsDir);
+    console.log(`${logfiles.length} logs found`);
+    if(!logfiles.length) { return console.log('No logs available'); }
+    $.eachSeries(logfiles, parser, (err) => {
+      console.log('done syncing records to DB');
+    });
   });
 }
 
